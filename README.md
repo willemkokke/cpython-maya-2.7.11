@@ -93,6 +93,7 @@ Development Log
    to the repository.
  - Added a README.md with an explanation of why this madness exists.
  - Updated the openssl version used during the build to openssl-1.0.2h
+ - Updated the sqlite version used during the build to sqlite-3.14.2.0 
 
 License information
 -------------------
