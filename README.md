@@ -64,9 +64,13 @@ the official 2.7.11 installer gives us the following differences:
  - Using sqlite 3.6.21
  - TKinter is not available, so need to worry about tcl/tk.
 
- If you extract the Python27.zip stdlib shipped with Maya, it will contain a
- `test` folder which is the python testsuite. I want the results of running the
- testsuite on this build and in maya to be as identical as possible.
+The built in sqlite is very old, and I'm interested in potentially compiling
+a newer version to make it available in Maya. As sqlite has excellent
+backwards compatibility, this should not cause any issues.
+
+If you extract the Python27.zip stdlib shipped with Maya, it will contain a
+`test` folder which is the python testsuite. I want the results of running the
+testsuite on this build and in maya to be as identical as possible.
 
 Requirements
 ------------
@@ -87,8 +91,8 @@ Development Log
 
  - Forked cpython, created a new branch called vs2015-x64, and pushed it 
    to the repository.
- - Forked cpython-source-deps in case any dependencies need patched
  - Added a README.md with an explanation of why this madness exists.
+ - Updated the openssl version used during the build to openssl-1.0.2h
 
 License information
 -------------------
