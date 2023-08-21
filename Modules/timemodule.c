@@ -65,6 +65,12 @@ static long main_thread;
 #endif /* MS_WINDOWS */
 #endif /* !__WATCOMC__ || __QNX__ */
 
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+    #define timezone _timezone
+    #define tzname _tzname
+    #define daylight _daylight
+#endif /* defined(_MSC_VER) && _MSC_VER >= 1900 */
+
 #if defined(MS_WINDOWS) && !defined(__BORLANDC__)
 /* Win32 has better clock replacement; we have our own version below. */
 #undef HAVE_CLOCK

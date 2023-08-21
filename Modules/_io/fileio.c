@@ -81,7 +81,10 @@ internal_close(fileio *self)
         /* fd is accessible and someone else may have closed it */
         if (_PyVerify_fd(fd)) {
             Py_BEGIN_ALLOW_THREADS
+            _Py_BEGIN_SUPPRESS_IPH
+            errno = 0;
             err = close(fd);
+            _Py_END_SUPPRESS_IPH
             if (err < 0)
                 save_errno = errno;
             Py_END_ALLOW_THREADS
@@ -143,9 +146,18 @@ dircheck(fileio* self, PyObject *nameobj)
 {
 #if defined(HAVE_FSTAT) && defined(S_IFDIR) && defined(EISDIR)
     struct stat buf;
+    int res;
     if (self->fd < 0)
         return 0;
-    if (fstat(self->fd, &buf) == 0 && S_ISDIR(buf.st_mode)) {
+    
+    errno = 0;
+    Py_BEGIN_ALLOW_THREADS
+    _Py_BEGIN_SUPPRESS_IPH
+    res = fstat(self->fd, &buf);
+     _Py_END_SUPPRESS_IPH
+    Py_END_ALLOW_THREADS
+
+    if (res == 0 && S_ISDIR(buf.st_mode)) {
         errno = EISDIR;
         PyErr_SetFromErrnoWithFilenameObject(PyExc_IOError, nameobj);
         return -1;
@@ -159,17 +171,34 @@ check_fd(int fd)
 {
 #if defined(HAVE_FSTAT)
     struct stat buf;
-    if (!_PyVerify_fd(fd) || (fstat(fd, &buf) < 0 && errno == EBADF)) {
-        PyObject *exc;
-        char *msg = strerror(EBADF);
-        exc = PyObject_CallFunction(PyExc_OSError, "(is)",
-                                    EBADF, msg);
-        PyErr_SetObject(PyExc_OSError, exc);
-        Py_XDECREF(exc);
-        return -1;
+    int res;
+    PyObject *exc;
+    char *msg;
+    if (!_PyVerify_fd(fd)) {
+        goto badfd;
     }
-#endif
+
+    Py_BEGIN_ALLOW_THREADS
+    _Py_BEGIN_SUPPRESS_IPH
+    errno = 0;
+    res = fstat(fd, &buf);
+    _Py_END_SUPPRESS_IPH
+    Py_END_ALLOW_THREADS
+
+    if (res < 0 && errno == EBADF) {
+        goto badfd;
+    }
     return 0;
+badfd:
+    msg = strerror(EBADF);
+    exc = PyObject_CallFunction(PyExc_OSError, "(is)",
+                                EBADF, msg);
+    PyErr_SetObject(PyExc_OSError, exc);
+    Py_XDECREF(exc);
+    return -1;
+#else
+    return 0;
+#endif
 }
 
 
@@ -191,7 +220,6 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
     int fd = -1;
     int closefd = 1;
     int fd_is_own = 0;
-
     assert(PyFileIO_Check(oself));
     if (self->fd >= 0) {
         if (self->closefd) {
@@ -202,17 +230,14 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
         else
             self->fd = -1;
     }
-
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|si:fileio",
                                      kwlist, &nameobj, &mode, &closefd))
         return -1;
-
     if (PyFloat_Check(nameobj)) {
         PyErr_SetString(PyExc_TypeError,
                         "integer argument expected, got float");
         return -1;
     }
-
     fd = _PyLong_AsInt(nameobj);
     if (fd < 0) {
         if (!PyErr_Occurred()) {
@@ -222,10 +247,14 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
         }
         PyErr_Clear();
     }
-
 #ifdef MS_WINDOWS
-    if (PyUnicode_Check(nameobj))
+    if (PyUnicode_Check(nameobj)) {
         widename = PyUnicode_AS_UNICODE(nameobj);
+        if (wcslen(widename) != (size_t)PyUnicode_GET_SIZE(nameobj)) {
+            PyErr_SetString(PyExc_TypeError, "embedded NUL character");
+            return -1;
+        }
+    }
     if (widename == NULL)
 #endif
     if (fd < 0)
@@ -234,13 +263,15 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
             Py_ssize_t namelen;
             if (PyObject_AsCharBuffer(nameobj, &name, &namelen) < 0)
                 return -1;
+            if (strlen(name) != (size_t)namelen) {
+                PyErr_SetString(PyExc_TypeError, "embedded NUL character");
+                return -1;
+            }
         }
         else {
             PyObject *u = PyUnicode_FromObject(nameobj);
-
             if (u == NULL)
                 return -1;
-
             stringobj = PyUnicode_AsEncodedString(
                 u, Py_FileSystemDefaultEncoding, NULL);
             Py_DECREF(u);
@@ -252,9 +283,12 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
                 goto error;
             }
             name = PyBytes_AS_STRING(stringobj);
+            if (strlen(name) != (size_t)PyBytes_GET_SIZE(stringobj)) {
+                PyErr_SetString(PyExc_TypeError, "embedded NUL character");
+                goto error;
+            }
         }
     }
-
     s = mode;
     while (*s) {
         switch (*s++) {
@@ -298,21 +332,17 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
             goto error;
         }
     }
-
     if (!rwa)
         goto bad_mode;
-
     if (self->readable && self->writable)
         flags |= O_RDWR;
     else if (self->readable)
         flags |= O_RDONLY;
     else
         flags |= O_WRONLY;
-
 #ifdef O_BINARY
     flags |= O_BINARY;
 #endif
-
     if (fd >= 0) {
         if (check_fd(fd))
             goto error;
@@ -326,7 +356,6 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
                 "Cannot use closefd=False with file name");
             goto error;
         }
-
         Py_BEGIN_ALLOW_THREADS
         errno = 0;
 #ifdef MS_WINDOWS
@@ -349,10 +378,8 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
     }
     if (dircheck(self, nameobj) < 0)
         goto error;
-
     if (PyObject_SetAttrString((PyObject *)self, "name", nameobj) < 0)
         goto error;
-
     if (self->appending) {
         /* For consistent behaviour, we explicitly seek to the
            end of file (otherwise, it might be done only on the
@@ -362,15 +389,11 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
             goto error;
         Py_DECREF(pos);
     }
-
     goto done;
-
  error:
     if (!fd_is_own)
         self->fd = -1;
-
     ret = -1;
-
  done:
     Py_CLEAR(stringobj);
     return ret;
@@ -458,23 +481,22 @@ fileio_seekable(fileio *self)
     return PyBool_FromLong((long) self->seekable);
 }
 
+
 static PyObject *
 fileio_readinto(fileio *self, PyObject *args)
 {
     Py_buffer pbuf;
     Py_ssize_t n, len;
-
     if (self->fd < 0)
         return err_closed();
     if (!self->readable)
         return err_mode("reading");
-
     if (!PyArg_ParseTuple(args, "w*", &pbuf))
         return NULL;
-
     if (_PyVerify_fd(self->fd)) {
         len = pbuf.len;
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
         if (len > INT_MAX)
@@ -483,6 +505,7 @@ fileio_readinto(fileio *self, PyObject *args)
 #else
         n = read(self->fd, pbuf.buf, len);
 #endif
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
     } else
         n = -1;
@@ -503,9 +526,25 @@ new_buffersize(fileio *self, size_t currentsize)
 #ifdef HAVE_FSTAT
     off_t pos, end;
     struct stat st;
-    if (fstat(self->fd, &st) == 0) {
+    int res;
+
+    Py_BEGIN_ALLOW_THREADS
+    _Py_BEGIN_SUPPRESS_IPH
+    errno = 0;
+    res = fstat(self->fd, &st);
+    _Py_END_SUPPRESS_IPH
+    Py_END_ALLOW_THREADS
+
+    if (res == 0) {
         end = st.st_size;
+
+        Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
+        errno = 0;
         pos = lseek(self->fd, 0L, SEEK_CUR);
+        _Py_END_SUPPRESS_IPH
+        Py_END_ALLOW_THREADS
+
         /* Files claiming a size smaller than SMALLCHUNK may
            actually be streaming pseudo-files. In this case, we
            apply the more aggressive algorithm below.
@@ -528,16 +567,13 @@ fileio_readall(fileio *self)
     PyObject *result;
     Py_ssize_t total = 0;
     Py_ssize_t n;
-
     if (self->fd < 0)
         return err_closed();
     if (!_PyVerify_fd(self->fd))
         return PyErr_SetFromErrno(PyExc_IOError);
-
     result = PyBytes_FromStringAndSize(NULL, SMALLCHUNK);
     if (result == NULL)
         return NULL;
-
     while (1) {
         size_t newsize = new_buffersize(self, total);
         if (newsize > PY_SSIZE_T_MAX || newsize <= 0) {
@@ -547,12 +583,12 @@ fileio_readall(fileio *self)
             Py_DECREF(result);
             return NULL;
         }
-
         if (PyBytes_GET_SIZE(result) < (Py_ssize_t)newsize) {
             if (_PyBytes_Resize(&result, newsize) < 0)
                 return NULL; /* result has been freed */
         }
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
         n = newsize - total;
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
@@ -566,6 +602,7 @@ fileio_readall(fileio *self)
                  PyBytes_AS_STRING(result) + total,
                  n);
 #endif
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
         if (n == 0)
             break;
@@ -589,7 +626,6 @@ fileio_readall(fileio *self)
         }
         total += n;
     }
-
     if (PyBytes_GET_SIZE(result) > total) {
         if (_PyBytes_Resize(&result, total) < 0) {
             /* This should never happen, but just in case */
@@ -598,7 +634,6 @@ fileio_readall(fileio *self)
     }
     return result;
 }
-
 static PyObject *
 fileio_read(fileio *self, PyObject *args)
 {
@@ -606,19 +641,15 @@ fileio_read(fileio *self, PyObject *args)
     Py_ssize_t n;
     Py_ssize_t size = -1;
     PyObject *bytes;
-
     if (self->fd < 0)
         return err_closed();
     if (!self->readable)
         return err_mode("reading");
-
     if (!PyArg_ParseTuple(args, "|O&", &_PyIO_ConvertSsize_t, &size))
         return NULL;
-
     if (size < 0) {
         return fileio_readall(self);
     }
-
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
     if (size > INT_MAX)
         size = INT_MAX;
@@ -630,16 +661,17 @@ fileio_read(fileio *self, PyObject *args)
 
     if (_PyVerify_fd(self->fd)) {
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
         n = read(self->fd, ptr, (int)size);
 #else
         n = read(self->fd, ptr, size);
 #endif
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
     } else
         n = -1;
-
     if (n < 0) {
         Py_DECREF(bytes);
         if (errno == EAGAIN)
@@ -647,31 +679,35 @@ fileio_read(fileio *self, PyObject *args)
         PyErr_SetFromErrno(PyExc_IOError);
         return NULL;
     }
-
     if (n != size) {
         if (_PyBytes_Resize(&bytes, n) < 0)
             return NULL;
     }
-
     return (PyObject *) bytes;
 }
-
 static PyObject *
 fileio_write(fileio *self, PyObject *args)
 {
     Py_buffer pbuf;
     Py_ssize_t n, len;
-
     if (self->fd < 0)
         return err_closed();
     if (!self->writable)
         return err_mode("writing");
-
-    if (!PyArg_ParseTuple(args, "s*", &pbuf))
+    if (!PyArg_ParseTuple(args, "s*:write", &pbuf)) {
         return NULL;
+    }
+    if (PyUnicode_Check(PyTuple_GET_ITEM(args, 0)) &&
+        PyErr_WarnPy3k("write() argument must be string or buffer, "
+                       "not 'unicode'", 1) < 0)
+    {
+        PyBuffer_Release(&pbuf);
+        return NULL;
+    }
 
     if (_PyVerify_fd(self->fd)) {
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
         errno = 0;
         len = pbuf.len;
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
@@ -681,19 +717,17 @@ fileio_write(fileio *self, PyObject *args)
 #else
         n = write(self->fd, pbuf.buf, len);
 #endif
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
     } else
         n = -1;
-
     PyBuffer_Release(&pbuf);
-
     if (n < 0) {
         if (errno == EAGAIN)
             Py_RETURN_NONE;
         PyErr_SetFromErrno(PyExc_IOError);
         return NULL;
     }
-
     return PyLong_FromSsize_t(n);
 }
 
@@ -704,7 +738,6 @@ static PyObject *
 portable_lseek(int fd, PyObject *posobj, int whence)
 {
     Py_off_t pos, res;
-
 #ifdef SEEK_SET
     /* Turn 0, 1, 2 into SEEK_{SET,CUR,END} */
     switch (whence) {
@@ -719,7 +752,6 @@ portable_lseek(int fd, PyObject *posobj, int whence)
 #endif
     }
 #endif /* SEEK_SET */
-
     if (posobj == NULL)
         pos = 0;
     else {
@@ -738,17 +770,19 @@ portable_lseek(int fd, PyObject *posobj, int whence)
 
     if (_PyVerify_fd(fd)) {
         Py_BEGIN_ALLOW_THREADS
+        _Py_BEGIN_SUPPRESS_IPH
+        errno = 0;
 #if defined(MS_WIN64) || defined(MS_WINDOWS)
         res = _lseeki64(fd, pos, whence);
 #else
         res = lseek(fd, pos, whence);
 #endif
+        _Py_END_SUPPRESS_IPH
         Py_END_ALLOW_THREADS
     } else
         res = -1;
     if (res < 0)
         return PyErr_SetFromErrno(PyExc_IOError);
-
 #if defined(HAVE_LARGEFILE_SUPPORT)
     return PyLong_FromLongLong(res);
 #else

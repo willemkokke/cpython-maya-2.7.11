@@ -109,6 +109,11 @@ Development Log
  - Applied https://github.com/kovidgoyal/cpython/commit/a7b47371db6706808d7929ef5b7921c6bd4ce217
    - Pythoncore project now builds but fails to link. (unresolved external __imp___pioinfo)
    - More build artifacts added to .gitignore 
+ - Applied https://github.com/kovidgoyal/cpython/commit/2ffdc5b0828aa7892b2549e105bf44baf6c7a9ff
+    - This fixes the linker error, woohoo!
+    - Also fixes a difference in error handling of invalid file descriptors in the 2015 crt.
+    - The build seems to mostly run through (there is a python.exe in PCbuild/amd64 now)
+    - The SSL module fails to build due to not being able to find includes 
 
 License information
 -------------------
