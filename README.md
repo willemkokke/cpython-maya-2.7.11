@@ -113,7 +113,9 @@ Development Log
     - This fixes the linker error, woohoo!
     - Also fixes a difference in error handling of invalid file descriptors in the 2015 crt.
     - The build seems to mostly run through (there is a python.exe in PCbuild/amd64 now)
-    - The SSL module fails to build due to not being able to find includes 
+    - The SSL module fails to build due to not being able to find includes
+ - Backported all commits from the python repository involved in upgrading openssl 1.0.2d to 1.0.2h
+    - Everything now builds, the repl starts and the binary extensions can succesfully be imported. 
 
 License information
 -------------------
