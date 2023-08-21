@@ -86,6 +86,12 @@ Building this repository requires the following:
    Universal Windows App Development Tools | Windows 10 SDK (10.0.10586.0)`
    which is the SDK Maya is built with.
 
+Helpful Websites and Projects
+-----------------------------
+
+ - https://www.aleksandarkocic.com/2020/11/07/building-python27-with-msvc2015/
+ - https://github.com/kovidgoyal/cpython/
+
 Development Log
 ---------------
 
@@ -93,7 +99,13 @@ Development Log
    to the repository.
  - Added a README.md with an explanation of why this madness exists.
  - Updated the openssl version used during the build to openssl-1.0.2h
- - Updated the sqlite version used during the build to sqlite-3.14.2.0 
+ - Updated the sqlite version used during the build to sqlite-3.14.2.0
+ - Did the first build by running `build.bat -e --no-tkinter -p x64 -v "/p:PlatformToolset=v140" "/p:WindowsTargetPlatformVersion=10.0.10586.0"` from the PCBuild folder:
+   - The right dependencies were downloaded.
+   - It used the right compiler.
+   - It used the right windows SDK
+   - It errored building `Modules\timemodule.c` in pythoncore.
+   - Added build artifacts to .gitignore
 
 License information
 -------------------

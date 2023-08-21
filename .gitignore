@@ -23,6 +23,7 @@ Modules/Setup.config
 Modules/Setup.local
 Modules/config.c
 Modules/ld_so_aix
+PC/pythonnt_rc.h
 PCbuild/*.bsc
 PCbuild/*.dll
 PCbuild/*.exe
@@ -31,6 +32,7 @@ PCbuild/*.lib
 PCbuild/*.ncb
 PCbuild/*.o
 PCbuild/*.pdb
+PCbuild/obj/
 PCbuild/Win32-temp-*
 Parser/pgen
 Parser/pgen.stamp
