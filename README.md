@@ -106,6 +106,9 @@ Development Log
    - It used the right windows SDK
    - It errored building `Modules\timemodule.c` in pythoncore.
    - Added build artifacts to .gitignore
+ - Applied https://github.com/kovidgoyal/cpython/commit/a7b47371db6706808d7929ef5b7921c6bd4ce217
+   - Pythoncore project now builds but fails to link. (unresolved external __imp___pioinfo)
+   - More build artifacts added to .gitignore 
 
 License information
 -------------------

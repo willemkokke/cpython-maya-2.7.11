@@ -32,6 +32,7 @@ PCbuild/*.lib
 PCbuild/*.ncb
 PCbuild/*.o
 PCbuild/*.pdb
+PCbuild/amd64/
 PCbuild/obj/
 PCbuild/Win32-temp-*
 Parser/pgen
