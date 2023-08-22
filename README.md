@@ -114,9 +114,18 @@ Development Log
     - Also fixes a difference in error handling of invalid file descriptors in the 2015 crt.
     - The build seems to mostly run through (there is a python.exe in PCbuild/amd64 now)
     - The SSL module fails to build due to not being able to find includes
- - Backported all commits from the python repository involved in upgrading openssl 1.0.2d to 1.0.2h
-    - Everything now builds, the repl starts and the binary extensions can succesfully be imported. 
-
+ - Backported all commits from the cpython repository involved in upgrading openssl 1.0.2d to 1.0.2h
+    - Everything now builds, the repl starts and the binary extensions can succesfully be imported.
+ - Ran the test suite by calling `rt.bat -x64` from the PCbuild folder.
+    - This results in the following command line: `python -Wd -3 -E -tt ..\Lib\test\regrtest.py`
+    - This hangs indefinately on test_asyncore
+ - Established a baseline by running the test suite in maya 2018 and 2022-py2
+    - It crashes on certain tests, so I selectively disabled them until it ran through. Final command line:
+      `python -Wd -E -tt .\Python27\Lib\test\regrtest.py -W -q -u network,largefile,subprocess -x test_bz2 -x test_ctypes -x test_marshal -x test_ssl -x test_tarfile`
+    - Committed the logs at /VS2015-x64/test_log_2018.txt /VS2015-x64/test_log_2022-py2.txt
+    - Diffed the logs, and as expected, there is no significant difference between the maya versions, so one build really can serve all.
+ - Applied a few more patches from https://github.com/kovidgoyal/cpython/ that seemed relevant to vs2015 compatibility
+ 
 License information
 -------------------
 
